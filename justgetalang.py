@@ -42,6 +42,122 @@ import platform
 verbose = True
 
 
+class DirtyHTML:
+    def __init__(self, value, is_html):
+        self.value = value
+        self.is_html = is_html
+
+
+class ParseDirtyHTML:
+    '''
+    This is an iterator that either gives you an html chunk (a
+    DirtyHTML object where o.is_html is True) or
+    a text chunk (where o.is_html is false) on each iteration.
+    Iterate through one of these to process your
+    html in a blunt manner even if the quotes inside of tags are
+    escaped (such as ones stored with the dreaded "magic quotes").
+
+    For certainty despite the assumptions, the iterator will
+    raise a SyntaxError if there is any closing sign ('>') before an
+    opening sign ('<'), or there is another opening sign before an
+    opened tag is closed by a closing sign.
+
+    This was made for processing language strings in
+    Poikilos/AngularCMS's internationalization branch, but it can do
+    pretty much anything that requires the assumptions above.
+    '''
+
+    def __init__(self, data, path, lineN, offset):
+        '''
+        Sequential arguments:
+        data -- Any parts enclosed in '<' and '>' are considered to be
+                HTML tags no matter how messy everything else is.
+        path -- The file path, if any, only used for error messages.
+        lineN -- The line number, if any, only used for error messages.
+        offset -- The column number at which the data starts in the
+                  source code, only used for error messages.
+        '''
+        self._data = data
+        self._i = 0  # This is the position in data.
+        self._start = 0  # This is the start of the chunk.
+        self._in_tag = False
+        self.path = path
+        self.lineN = lineN
+        if offset is None:
+            offset = -1
+        self.offset = offset
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        data = self._data
+        if self._i >= len(data):
+            raise StopIteration
+        while self._i < len(data):
+            if self._in_tag:
+                if data[self._i] == "<":
+                    prefix = "{}:{}:{}: ".format(self.path, self.lineN,
+                                                 self._i+self.offset)
+                    msg = ("An opening bracket"
+                           " occurred before the previous one"
+                           " was closed in \"{}\""
+                           "".format(data))
+                    error(prefix)
+                    # ^ Don't show the location using "SyntaxError",
+                    #   since that would put "SyntaxError: " before it.
+                    raise SyntaxError(msg)
+                if data[self._i] == ">":
+                    start = self._start
+                    self._i += 1
+                    self._start = self._i
+                    # ^ Get start after incrementing since closing.
+                    self._in_tag = False
+                    return DirtyHTML(data[start:self._i], True)
+                    # ^ Use the incremented _i since the character
+                    #   before it is the closer and is part of the
+                    #   html chunk.
+            else:
+                if data[self._i] == ">":
+                    prefix = "{}:{}:{}: ".format(self.path, self.lineN,
+                                                 self._i+self.offset)
+                    msg = ("A closing bracket occurred"
+                           " before an opening bracket"
+                           " in \"{}\""
+                           "".format(data))
+                    error(prefix)
+                    # ^ Don't show the location using "SyntaxError",
+                    #   since that would put "SyntaxError: " before it.
+                    raise SyntaxError(msg)
+                if data[self._i] == "<":
+                    self._in_tag = True
+                    if (self._i - self._start) > 0:
+                        start = self._start
+                        self._start = self._i
+                        # ^ Get start before incrementing since opening.
+                        self._i += 1
+                        return DirtyHTML(data[start:self._i-1], False)
+                        # ^ Use the previous start. Go back one since
+                        #   the new opener is not part of the previous
+                        #   non-html chunk.
+                    # else the string starts with a tag, so keep going
+                    # until there is something to return.
+            self._i += 1
+
+        start = self._start
+        self._start = self._i
+        if self._in_tag:
+            prefix = "{}:{}:{}: ".format(self.path, self.lineN,
+                                         start+self.offset)
+            error(prefix)
+            raise SyntaxError("The line ends without closing the"
+                              "tag that starts here.")
+        if (self._i - start) > 0:
+            return DirtyHTML(data[start:self._i], self._in_tag)
+        else:
+            raise StopIteration
+
+
 def value_to_py(v, q='"'):
     '''
     Convert a value to a Python RValue ready to save to a py file.
@@ -70,6 +186,13 @@ def value_to_py(v, q='"'):
 
 
 def set_verbose(v):
+    '''
+    Set whether to show verbose output.
+    This function requires value_to_py.
+
+    Sequential arguments:
+    v -- True for on, False for no output from the debug function.
+    '''
     if v is True:
         verbose = True
     elif v is False:
@@ -207,10 +330,22 @@ def find_quoted_not_escaped(haystack, *args):
     return (openQI, -1, closing)
 
 
+class JGALPhraseBuilder:
+    def __init__(self):
+        self.lineN = 0
+        self.vCol = 0
+
+    def build(self):
+        return JGALPhrase(self)
+
 class JGALPhrase:
-    def __init__(self, lang, key, value, gQ, lQ, kQ, vQ, extras, indent, suffix):
+    '''
+    Track the context of a translated phrase within a code file.
+    '''
+
+    def __init__(self, builder):
         '''
-        Sequential arguments:
+        Required builder members:
         key -- the key in this language
         value -- the phrase in the particular language
         gQ -- the quote symbol used around the key directly in globals
@@ -221,39 +356,134 @@ class JGALPhrase:
         indent -- anything before the line starts such as spacing
         suffix -- a semicolon (not required), comments, or anything else
                   after the closing bracket
+
+        Optional members:
+        lineN -- the source code line number only used for errors
+        vCol -- the source code column at which the value starts
         '''
-        self.lang = lang
-        self.key = key
-        self.value = value
-        self.gQ = gQ
-        self.lQ = lQ
-        self.kQ = kQ
-        self.vQ = vQ
-        self.extras = extras
-        self.indent = indent
-        self.suffix = suffix
+        self.lang = builder.lang
+        self.key = builder.key
+        self.value = builder.value
+        self.gQ = builder.gQ
+        self.lQ = builder.lQ
+        self.kQ = builder.kQ
+        self.vQ = builder.vQ
+        self.extras = builder.extras
+        self.indent = builder.indent
+        self.suffix = builder.suffix
+        self.globalsName = builder.globalsName
+        self.translationsKey = builder.translationsKey
+        self.langDotExt = builder.langDotExt
+        self.lineN = builder.lineN
+        self.vCol = builder.vCol
+
+    def reconstruct(self, lang, value):
+        '''
+        Use this phrase as a template and return a new JGALPhrase
+        with the new language and value specified.
+        '''
+        builder = JGALPhraseBuilder()
+        builder.lang = self.lang
+        builder.key = self.key
+        builder.value = value
+        builder.gQ = self.gQ
+        builder.lQ = self.lQ
+        builder.kQ = self.kQ
+        builder.vQ = self.vQ
+        builder.extras = self.extras
+        builder.indent = self.indent
+        builder.suffix = self.suffix
+        builder.globalsName = self.globalsName
+        builder.translationsKey = self.translationsKey
+        builder.langDotExt = self.langDotExt
+        builder.lineN = self.lineN
+        return builder.build()
+
+    def toCode(self):
+        '''
+        Convert this back to the original language that originated it,
+        including the indent and the suffix (which would include a
+        semicolon if the line in the original program did).
+        '''
+        return (self.indent + self.globalsName + '[' + self.gQ +
+                self.translationsKey + self.gQ + ']['
+                + self.lQ + self.lang + self.lQ + ']['
+                + self.kQ + self.key + self.kQ + '] = '
+                + self.vToPy(self.value) + self.suffix)
+
+    def gToPy(self, s):
+        '''
+        Return a quoted and escaped version of s using
+        this variable's line's translations global quote mark.
+
+        This method requires value_to_py.
+        '''
+        return value_to_py(str(s), q=self.gQ)
+
+    def lToPy(self, s):
+        '''
+        Return a quoted and escaped version of s using
+        this variable's line's quote mark that was around the language.
+
+        This method requires value_to_py.
+        '''
+        return value_to_py(str(s), q=self.lQ)
+
+    def kToPy(self, s):
+        '''
+        Return a quoted and escaped version of s using
+        this variable's line's quote mark that was around the key.
+
+        This method requires value_to_py.
+        '''
+        return value_to_py(str(s), q=self.kQ)
+
+    def vToPy(self, s):
+        '''
+        Return a quoted and escaped version of s using
+        this variable's line's quote mark that was around the key.
+
+        This method requires value_to_py.
+        '''
+        return value_to_py(str(s), q=self.vQ)
 
 
 class JGALPack:
 
     existingLangsWarn = True
-    globalsName = '$GLOBALS'
-    translationsKey = 'translations'
-    langDotExt = ".php"
+    default_globalsName = '$GLOBALS'
+    default_translationsKey = 'translations'
+    default_langDotExt = ".php"
     CO = 0  # Set this to 1 if 1st column is 1 in your code editor.
 
-    def __init__(self, langs_path, sub, lang):
+    def getPath(self):
+        return os.path.join(self.langs_path, self.lang + self.dotExt)
+
+    def __init__(self, langs_path, sub, lang,
+                 globalsName=None,
+                 translationsKey=None):
         '''
         Sequential arguments:
         langs_path -- This must contain the language file named sub.
         sub -- This language file must be in langs_path.
         lang -- This language must be a valid language id string such
-                as recognized by Google Translate.
+                as recognized by Google Translate. It is used as the
+                key within the translations associative array.
+
+        Keyword arguments:
+        globalsName -- the name of the globals object in your code, such
+                       as $GLOBALS
+        translationsKey -- the key in the globals that accesses the
+                           entire translations associative array
         '''
+        if globalsName is None:
+            globalsName = JGALPack.default_globalsName
+        self.globalsName = globalsName
+        if translationsKey is None:
+            translationsKey = JGALPack.default_translationsKey
+        self.translationsKey = translationsKey
         self.phrases = {}
         self.keys = []  # This list exists to keep the keys in order.
-        globalsName = JGALPack.globalsName
-        translationsKey = JGALPack.translationsKey
         translationsSymbol = "{}[".format(globalsName)
         # The full opening is: translationsSymbol
         #                      + "['"+translationsKey+"']"
@@ -269,6 +499,7 @@ class JGALPack:
                   " and the line may or may not end with a semicolon"
                   " and/or comment)"
                   "".format(translationsSymbol, lang))
+        self.dotExt = os.path.splitext(sub)[1]
         self.langs_path = langs_path
         self.sub = sub
         if not os.path.isdir(langs_path):
@@ -441,10 +672,24 @@ class JGALPack:
                     error("{}:{}:{}: ']' was expected after the key."
                           "".format(self.path, lineN, vFound[1]+1+CO))
                 # ^ the last closing bracket's index
+                builder = JGALPhraseBuilder()
+                builder.lang = debugLang
+                builder.key = key
+                builder.value = value
+                builder.gQ = gFound[2]
+                builder.lQ = lFound[2]
+                builder.kQ = kFound[2]
+                builder.vQ = vFound[2]
+                builder.extras = extras
+                builder.indent = indent
+                builder.suffix = suffix
+                builder.globalsName = self.globalsName
+                builder.translationsKey = self.translationsKey
+                builder.langDotExt = self.dotExt
+                builder.lineN = lineN
+                builder.vCol = vFound[0] + CO
+                phrase = builder.build()
 
-                phrase = JGALPhrase(debugLang, key, value, gFound[2],
-                                    lFound[2], kFound[2], vFound[2],
-                                    extras, indent, suffix)
                 self.phrases[key] = phrase
                 self.keys.append(key)
                 extras = []
@@ -467,16 +712,16 @@ class JGALPack:
                 continue
             if d in ignores:
                 continue
-            if not d.lower().endswith(cls.langDotExt.lower()):
+            if not d.lower().endswith(cls.default_langDotExt.lower()):
                 if cls.existingLangsWarn:
                     print("WARNING: list langs ignored the file \"{}\""
                           " since it is not a {} file."
-                          "".format(d, cls.langDotExt))
+                          "".format(d, cls.default_langDotExt))
                 continue
             if ignore_langs is not None:
                 if d in ignore_langs:
                     continue
-            langs.append(d[:-len(cls.langDotExt)])
+            langs.append(d[:-len(cls.default_langDotExt)])
         cls.existingLangsWarn = False
         return langs
 
@@ -487,7 +732,8 @@ def main():
         error("")
         raise ValueError("Error: You must specify a language to check.")
     nextLang = sys.argv[1]
-    origLangSub = original + JGALPack.langDotExt
+    langDotExt = JGALPack.default_langDotExt
+    origLangSub = original + langDotExt
     origLangPath = os.path.join(langsPath, origLangSub)
     if nextLang == original:
         langs = existingLangs([origLangSub])
@@ -498,7 +744,7 @@ def main():
                          " You must specify a language such as one "
                          " in \"{}\":"
                          " {}".format(original, langsPath, langs))
-    nextSub = nextLang + JGALPack.langDotExt
+    nextSub = nextLang + langDotExt
     nextPath = os.path.join(langsPath, nextSub)
     if not os.path.isfile(nextPath):
         usage()
@@ -515,9 +761,9 @@ def main():
         usage()
         error("")
         raise ValueError("Error: \"{}\" is missing (original={},"
-                         " JGALPack.langDotExt={})"
+                         " langDotExt={})"
                          "".format(origLangPath, original,
-                                   JGALPack.langDotExt))
+                                   langDotExt))
 
     # for nextSub in os.listdir(langsPath):
     #     nextPath = os.path.join(langsPath, nextSub)
@@ -529,13 +775,13 @@ def main():
     #         continue
     #     error("* analyzing \"{}\"...".format(nextSub))
     #     #result = translator.translate(srcVal)
-    thisDotExt = JGALPack.langDotExt
-    if not nextSub.lower().endswith(JGALPack.langDotExt.lower()):
+    # thisDotExt = langDotExt
+    if not nextSub.lower().endswith(langDotExt.lower()):
         # continue
         nextLang = os.path.splitext(nextSub)[0]
-        thisDotExt = os.path.splitext(nextSub)[1]
+        # thisDotExt = os.path.splitext(nextSub)[1]
     else:
-        nextLang = nextSub[:-len(JGALPack.langDotExt)]
+        nextLang = nextSub[:-len(langDotExt)]
 
     error("INFO: analyzing \"{}\"...".format(nextPath))
     nextPack = JGALPack(langsPath, nextSub, nextLang)
@@ -549,7 +795,35 @@ def main():
             continue
         # nextPhrase is None, so generate it through translation.
         origPhrase = origPack.phrases[key]
-        print("translate {}".format(origPhrase.value))
+        debug("translate {}".format(origPhrase.value))
+        nextValue = ""
+        for chunk in ParseDirtyHTML(origPhrase.value,
+                                    origPack.getPath(),
+                                    origPhrase.lineN,
+                                    origPhrase.vCol):
+            if chunk.is_html:
+                nextValue += chunk.value
+            else:
+                escapeQ = None
+                tmp = chunk.value
+                if "\\\"" in tmp:
+                    escapeQ = '"'
+                elif "\\'" in tmp:
+                    escapeQ = "'"
+                if escapeQ is not None:
+                    tmp = tmp.replace("\\" + escapeQ, escapeQ)
+                # tmp = translate(tmp)
+                if escapeQ is not None:
+                    tmp = tmp.replace(escapeQ, "\\" + escapeQ)
+                nextValue += tmp
+        gQ = origPhrase.gQ
+        lQ = origPhrase.lQ
+        kQ = origPhrase.kQ
+
+        for extra in origPhrase.extras:
+            print(extra)
+        nextPhrase = origPhrase.reconstruct(nextLang, nextValue)
+        print(nextPhrase.toCode())
 
 
 if __name__ == "__main__":
