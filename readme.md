@@ -6,6 +6,10 @@ This program is GPL v2.1 or higher.
 
 ## Use
 This program will mimic and translate any files using the syntax: `{globalsName}['{translationsKey}']['key'] = 'value'` where `key` is any language key compatible with Google Translate such as 'en' or 'pl'.
+- Examples:
+  - `$GLOBALS['translations']['es'][key] = 'Hola'` then run the program and get:
+  - `$GLOBALS['translations']['en'][key] = 'Hello'`
+    - You can run when the lang/es.php has dozens of lines like that: justgetalang will print all of the lines that are missing to standard output and cache them to trCache.json in the current directory.
 - The file may use any type of quotes, and the type of quote will be preserved on a per-key per-line basis.
 - You can change `JGALPack.globalsName` to something other than `$GLOBLALS`.
 - You can change `JGALPack.translationsKey` to something other than `translations`.

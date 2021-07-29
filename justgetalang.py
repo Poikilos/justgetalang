@@ -1169,6 +1169,7 @@ def main():
     nextPack = JGALPack(langsPath, nextSub, nextLang)
     error("INFO: analyzing \"{}\"...".format(origLangPath))
     origPack = JGALPack(langsPath, origLangSub, origLang)
+    newCount = 0
     for key in origPack.keys:
         nextPhrase = nextPack.phrases.get(key)
         # ^ See if the original language key is in the target language.
@@ -1240,11 +1241,22 @@ def main():
         for extra in origPhrase.extras:
             print(extra)
         nextPhrase = origPhrase.reconstruct(nextLang, nextValue)
+        newCount += 1
         print(nextPhrase.toCode())
 
     with open(trCachePath, 'w') as outs:
         json.dump(trCache, outs, sort_keys=True, indent=2)
     error("INFO: The cache was saved to \"{}\"".format(trCachePath))
+    if newCount > 0:
+        error("INFO: {} printed in this session"
+              " based on the original language \"{}\""
+              " are not yet in \"{}\","
+              " so you will have to paste them into the file."
+              "".format(newCount, origLang, nextPack.getPath()))
+    else:
+        error("INFO: All keys from the original language file \"{}\""
+              " are in \"{}\" (There is nothing to do)."
+              "".format(origPack.getPath(), nextPack.getPath()))
 
 if __name__ == "__main__":
     main()
