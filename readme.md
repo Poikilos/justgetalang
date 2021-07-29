@@ -1,5 +1,5 @@
 # justgetalang
-Can't we all just get a lang? Make one language php file from another using Google Translate's automatic translation via googletrans.
+Can't we all just get a lang? Make one language php file from another using Google Translate's automatic translation via the `googletrans` PyPI package.
 
 ## License
 This program is GPL v2.1 or higher.
