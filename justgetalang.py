@@ -41,18 +41,131 @@ import platform
 
 verbose = True
 
+trCache = {}
+trCachePath = 'trCache.json'
+if os.path.isfile(trCachePath):
+    with open(trCachePath) as ins:
+        trCache = json.load(ins)
+
+def _translate(value, fromLang, toLang):
+    '''
+    Translate value to toLang.
+    '''
+    debug("  *translate chunk* " + value)
+    return value
+
+builtins_en_done = {}
+
+def build_builtins_en(fromLang, toLang):
+    '''
+    Forcibly copy English words found in a non-english source
+    to the destination language.
+
+    Sequential arguments:
+    fromLang -- This is the language of the source that has mixed in
+                English words.
+    toLang -- This is the destination language. Since this function
+              overwrites parts with English, toLang should be en,
+              en_US, en_GB or some other English dialect.
+    '''
+    if trCache.get(fromLang) is None:
+        trCache[fromLang] = {}
+    if trCache[fromLang].get(toLang) is None:
+        trCache[fromLang][toLang] = {}
+    # The game-related
+    andrzuk_games = [
+        'Demo',
+        'Score:',
+        'Scores List',
+        'Speed:',
+        'Super fast (20x)',
+        'Very fast (10x)',
+        'Faster (5x)',
+        'Little faster (4x)',
+        'Medium (3x)',
+        'Slow (2x)',
+        'Very slow (1x)',
+        'Play',
+        'Pause',
+        'Map editor',
+        'Canvas is not supported in your browser.',
+        'Start',
+        'Keyboard control:',
+        'Rotation:',
+        'PageUp',
+        'PageDown',
+        'Move:',
+        'Left',
+        'Right',
+        'Down',
+        'Drop:',
+        'Space bar',
+        'Space Bar',
+        'Save &amp; Exit',
+        'Save &amp; exit',
+        'Close',
+        'Tetris Maps Editor',
+        '-180 days',
+    ]
+    for same in andrzuk_games:
+        trCache[fromLang][toLang][same] = same
+
+    sames = [
+        'http',
+        'https',
+        'Mail Manager',
+    ]
+    # TODO: Handle sub-parts such as in "-180 days"
+    # TODO: handle different capitalization and preserve case.
+    for same in sames:
+        trCache[fromLang][toLang][same] = same
+
+    builtins_en_done[fromLang] = True
+
+def translateCached(value, fromLang, toLang):
+    rawV = value
+    value = value.lstrip()
+    preSpace = rawV[:len(rawV)-len(value)]
+    postSpace = ""
+    postSpaceLen = len(rawV) - len(rawV.rstrip())
+    if postSpaceLen > 0:
+        postSpace = rawV[-postSpaceLen:]
+    value = value.rstrip()
+    if trCache.get(fromLang) is None:
+        trCache[fromLang] = {}
+    if trCache[fromLang].get(toLang) is None:
+        trCache[fromLang][toLang] = {}
+    if (toLang == "en") or (toLang.startswith("en_")):
+        if not builtins_en_done.get(fromLang) is True:
+            build_builtins_en(fromLang, toLang)
+    got = trCache[fromLang][toLang].get(value)
+    if got is None:
+        got = _translate(value, fromLang, toLang)
+        # trCache[fromLang][toLang][value] = got
+    return preSpace + got + postSpace
 
 class DirtyHTML:
-    def __init__(self, value, is_html):
+    FMT_HTML = 'html'
+    FMT_TEXT = 'text'
+    FMT_CSS = 'css'
+
+    def __init__(self, value, fmt):
+        '''
+        Sequential arguments:
+        value -- any string
+        fmt -- a format describing the string (It must match one of the
+               DirtyHTML.FMT_ constants.
+        '''
         self.value = value
-        self.is_html = is_html
+        self.fmt = fmt
 
 
 class ParseDirtyHTML:
     '''
     This is an iterator that either gives you an html chunk (a
-    DirtyHTML object where o.is_html is True) or
-    a text chunk (where o.is_html is false) on each iteration.
+    DirtyHTML object where o.fmt describes the language
+    on each iteration (See DirtyHTML.FMT_ constants for possible
+    values of o.fmt).
     Iterate through one of these to process your
     html in a blunt manner even if the quotes inside of tags are
     escaped (such as ones stored with the dreaded "magic quotes").
@@ -61,6 +174,9 @@ class ParseDirtyHTML:
     raise a SyntaxError if there is any closing sign ('>') before an
     opening sign ('<'), or there is another opening sign before an
     opened tag is closed by a closing sign.
+
+    The only exception is when the signs are in a style tag--in that
+    case, everything will be taken as html
 
     This was made for processing language strings in
     Poikilos/AngularCMS's internationalization branch, but it can do
@@ -80,7 +196,7 @@ class ParseDirtyHTML:
         self._data = data
         self._i = 0  # This is the position in data.
         self._start = 0  # This is the start of the chunk.
-        self._in_tag = False
+        self._in_fmt = 'text'
         self.path = path
         self.lineN = lineN
         if offset is None:
@@ -90,12 +206,161 @@ class ParseDirtyHTML:
     def __iter__(self):
         return self
 
+    @staticmethod
+    def isSubdirectory(s):
+        '''
+        Determine True or False: whether s is a subdirectory such as
+        starting with "/" or "\\" rather than a regular language string.
+        '''
+        s = s.strip()
+        if s.startswith("/"):
+            return True
+        if s.startswith("\\"):
+            return True
+        return False
+
+    @staticmethod
+    def isEmail(s, allow_local=False):
+        '''
+        Determine True or False: whether s is an e-mail address
+        such as with characters then '@' and then characters;
+        and no spaces.
+
+        Keyword arguments:
+        allow_local -- Allow the address to have only characters and
+                       not any dot after the '@'
+        '''
+        s = s.strip()
+        if " " in s:
+            return False
+        atI = s.find('@')
+        if atI < 1:
+            # ^ must be after 0
+            return False
+        if not allow_local:
+            dotI = s.find('.', atI)
+            if dotI <= atI + 1:
+                # The dot is directly after the '@'.
+                return False
+            elif dotI == (len(s) - 1):
+                # It ends with dot.
+                return False
+            return True
+        elif len(s) < atI + 1:
+            return False
+        else:
+            return True
+
+    @staticmethod
+    def isMention(s):
+        '''
+        Determine True or False: whether s is an @ mention
+        (starts with '@' and has no spaces)
+        '''
+        s = s.strip()
+        if " " in s:
+            return False
+        if s[0:1] == '@':
+            return True
+        return False
+
+    @staticmethod
+    def isHashtag(s):
+        '''
+        Determine True or False: whether s is a '#' hashtag
+        (starts with '#' and has no spaces)
+        '''
+        s = s.strip()
+        if " " in s:
+            return False
+        if s[0:1] == '#':
+            return True
+        return False
+
+    @staticmethod
+    def isMoney(s, symbol, symbolGoesAtEnd):
+        '''
+        Determine True or False: whether s is a dollar value.
+        '''
+        s = s.strip()
+        if not symbolGoesAtEnd:
+            if not s.startswith(symbol):
+                return False
+        else:
+            if not s.endswith(symbol):
+                return False
+        return ParseDirtyHTML.isNumber(s[1:])
+
+    @staticmethod
+    def isPunctuation(s):
+        '''
+        Determine True or False: whether s is only punctuation or blank.
+        '''
+        s = s.strip()
+        for c in s:
+            if c.isalpha():
+                return False
+        return True
+
+
+    @staticmethod
+    def isCodeSimpleAssignmentOp(s):
+        '''
+        Determine True or False: whether s is a simple assignment
+        operation such as "gameInterval = null;" (with or without a
+        semicolon, but with no spaces in either of the 2 parts!)
+        '''
+        s = s.strip()
+        parts = s.split("=")
+        if len(parts) == 2:
+            if ' ' not in parts[0].strip():
+                if ' ' not in parts[1].strip():
+                    return True
+        return False
+
+
+    @staticmethod
+    def isNumber(s):
+        '''
+        Determine True or False: whether s is a numeric string.
+        '''
+        # NOTE: If it starts with '-' or has '.' then
+        # s.isnumeric() returns False!
+        s = s.strip()
+        try:
+            tmp = int(s)
+            return True
+        except ValueError:
+            try:
+                tmp = float(s)
+                return True
+            except ValueError:
+                return False
+        return False
+
+    @staticmethod
+    def isDomainLike(s):
+        '''
+        Determine True or False: whether s is potentially a local or
+        online domain name (has a '.' and has no spaces)
+        '''
+        s = s.strip()
+        if ParseDirtyHTML.isNumber(s):
+            return False
+        if ' ' in s:
+            return False
+        if '.' in s:
+            return True
+        return False
+
     def __next__(self):
         data = self._data
+        styleOpeners = ["<style ", "<style>"]
+        styleCloser = "</style>"
         if self._i >= len(data):
             raise StopIteration
         while self._i < len(data):
-            if self._in_tag:
+            if self._in_fmt == DirtyHTML.FMT_HTML:
                 if data[self._i] == "<":
                     prefix = "{}:{}:{}: ".format(self.path, self.lineN,
                                                  self._i+self.offset)
@@ -112,12 +377,17 @@ class ParseDirtyHTML:
                     self._i += 1
                     self._start = self._i
                     # ^ Get start after incrementing since closing.
-                    self._in_tag = False
-                    return DirtyHTML(data[start:self._i], True)
+                    self._in_fmt = 'text'
+                    for styleOpener in styleOpeners:
+                        ender = start+len(styleOpener)
+                        if data[start:ender].lower() == styleOpener:
+                            self._in_fmt = 'css'
+                    return DirtyHTML(data[start:self._i],
+                                     DirtyHTML.FMT_HTML)
                     # ^ Use the incremented _i since the character
                     #   before it is the closer and is part of the
                     #   html chunk.
-            else:
+            elif self._in_fmt == DirtyHTML.FMT_TEXT:
                 if data[self._i] == ">":
                     prefix = "{}:{}:{}: ".format(self.path, self.lineN,
                                                  self._i+self.offset)
@@ -130,30 +400,49 @@ class ParseDirtyHTML:
                     #   since that would put "SyntaxError: " before it.
                     raise SyntaxError(msg)
                 if data[self._i] == "<":
-                    self._in_tag = True
+                    self._in_fmt = 'html'
                     if (self._i - self._start) > 0:
                         start = self._start
                         self._start = self._i
                         # ^ Get start before incrementing since opening.
                         self._i += 1
-                        return DirtyHTML(data[start:self._i-1], False)
+                        return DirtyHTML(data[start:self._i-1],
+                                         DirtyHTML.FMT_TEXT)
                         # ^ Use the previous start. Go back one since
                         #   the new opener is not part of the previous
                         #   non-html chunk.
                     # else the string starts with a tag, so keep going
                     # until there is something to return.
+            elif self._in_fmt == DirtyHTML.FMT_CSS:
+                ender = self._i+len(styleCloser)
+                if data[self._i:ender].lower() == styleCloser:
+                    start = self._start
+                    self._start = self._i
+                    # ^ Start the closing style tag at the '<'.
+                    self._in_fmt = DirtyHTML.FMT_HTML
+                    self._i += 1
+                    return DirtyHTML(data[start:self._i-1],
+                                     DirtyHTML.FMT_CSS)
+                    # ^ This is technically a closing of css even though
+                    #   it is an opening of html, so go back by -1
+                    #   to avoid capturing the '<' in styleCloser.
+            else:
+                raise RuntimeError("The parser is in an invalid state:"
+                                   " self._in_fmt={}"
+                                   "".format(value_to_py(self._in_fmt)))
             self._i += 1
 
         start = self._start
         self._start = self._i
-        if self._in_tag:
+        if self._in_fmt != DirtyHTML.FMT_TEXT:
             prefix = "{}:{}:{}: ".format(self.path, self.lineN,
                                          start+self.offset)
             error(prefix)
             raise SyntaxError("The line ends without closing the"
-                              "tag that starts here.")
+                              "{} tag that starts here."
+                              "".format(self._in_fmt))
         if (self._i - start) > 0:
-            return DirtyHTML(data[start:self._i], self._in_tag)
+            return DirtyHTML(data[start:self._i], self._in_fmt)
         else:
             raise StopIteration
 
@@ -222,7 +511,7 @@ from googletrans import Translator
 error("googletrans.LANGUAGES: " + json.dumps(googletrans.LANGUAGES))
 error("")
 
-original = "pl"
+origLang = "pl"
 profile = None
 if platform.system() == "Windows":
     profile = os.environ['USERPROFILE']
@@ -243,7 +532,7 @@ langsPath = os.path.join(repoPath, "lang")
 def usage():
     error(usage.format(
         lang=langPath,
-        original_lang=original,
+        original_lang=origLang,
     ))
 
 
@@ -383,7 +672,7 @@ class JGALPhrase:
         with the new language and value specified.
         '''
         builder = JGALPhraseBuilder()
-        builder.lang = self.lang
+        builder.lang = lang
         builder.key = self.key
         builder.value = value
         builder.gQ = self.gQ
@@ -725,6 +1014,49 @@ class JGALPack:
         cls.existingLangsWarn = False
         return langs
 
+escaped = {}
+escaped["\\'"] = "'"
+escaped["\\\""] = "\""
+escaped["\\a"] = "\a"
+escaped["\\b"] = "\b"
+escaped["\\f"] = "\f"
+escaped["\\n"] = "\n"
+escaped["\\t"] = "\t"
+escaped["\\v"] = "\v"
+
+
+def escape_only(s, seq):
+    '''
+    Replace instances of the real meaning of the sequence with seq
+    and return the result.
+
+    Sequential arguments:
+    s -- any string
+    c -- a valid python escape character
+    '''
+    got = escaped.get(seq)
+    if got is None:
+        raise ValueError("\"{}\" is not an implemented escape"
+                         " sequence.".format(seq))
+    return s.replace(got, seq)
+
+
+def unescape_only(s, seq):
+    '''
+    Replace instances of seq with the real meaning
+    and return the result.
+
+    Sequential arguments:
+    s -- any string
+    c -- any pair (escape sequence)
+
+    '''
+    got = escaped.get(seq)
+    if got is None:
+        raise ValueError("\"{}\" is not an implemented escape"
+                         " sequence.".format(seq))
+    return s.replace(seq, got)
+
 
 def main():
     if len(sys.argv) < 2:
@@ -733,9 +1065,9 @@ def main():
         raise ValueError("Error: You must specify a language to check.")
     nextLang = sys.argv[1]
     langDotExt = JGALPack.default_langDotExt
-    origLangSub = original + langDotExt
+    origLangSub = origLang + langDotExt
     origLangPath = os.path.join(langsPath, origLangSub)
-    if nextLang == original:
+    if nextLang == origLang:
         langs = existingLangs([origLangSub])
         usage()
         error("")
@@ -743,7 +1075,7 @@ def main():
                          " you specified the original language ({})."
                          " You must specify a language such as one "
                          " in \"{}\":"
-                         " {}".format(original, langsPath, langs))
+                         " {}".format(origLang, langsPath, langs))
     nextSub = nextLang + langDotExt
     nextPath = os.path.join(langsPath, nextSub)
     if not os.path.isfile(nextPath):
@@ -760,9 +1092,9 @@ def main():
     if not os.path.isfile(origLangPath):
         usage()
         error("")
-        raise ValueError("Error: \"{}\" is missing (original={},"
+        raise ValueError("Error: \"{}\" is missing (origLang={},"
                          " langDotExt={})"
-                         "".format(origLangPath, original,
+                         "".format(origLangPath, origLang,
                                    langDotExt))
 
     # for nextSub in os.listdir(langsPath):
@@ -786,7 +1118,7 @@ def main():
     error("INFO: analyzing \"{}\"...".format(nextPath))
     nextPack = JGALPack(langsPath, nextSub, nextLang)
     error("INFO: analyzing \"{}\"...".format(origLangPath))
-    origPack = JGALPack(langsPath, origLangSub, original)
+    origPack = JGALPack(langsPath, origLangSub, origLang)
     for key in origPack.keys:
         nextPhrase = nextPack.phrases.get(key)
         # ^ See if the original language key is in the target language.
@@ -795,13 +1127,13 @@ def main():
             continue
         # nextPhrase is None, so generate it through translation.
         origPhrase = origPack.phrases[key]
-        debug("translate {}".format(origPhrase.value))
+        # debug("*translate phrase* {}".format(origPhrase.value))
         nextValue = ""
         for chunk in ParseDirtyHTML(origPhrase.value,
                                     origPack.getPath(),
                                     origPhrase.lineN,
                                     origPhrase.vCol):
-            if chunk.is_html:
+            if chunk.fmt != DirtyHTML.FMT_TEXT:
                 nextValue += chunk.value
             else:
                 escapeQ = None
@@ -812,10 +1144,45 @@ def main():
                     escapeQ = "'"
                 if escapeQ is not None:
                     tmp = tmp.replace("\\" + escapeQ, escapeQ)
-                # tmp = translate(tmp)
+                tmp = unescape_only(tmp, "\\n")
+                formatting = False
+                tmpStrip = tmp.strip()
+                if len(tmpStrip) < 1:
+                    formatting = True
+                elif (tmpStrip.startswith("&")
+                      and tmpStrip.endswith(";")):
+                    formatting = True
+                elif ParseDirtyHTML.isSubdirectory(tmpStrip):
+                    formatting = True
+                elif ParseDirtyHTML.isEmail(tmpStrip):
+                    formatting = True
+                elif ParseDirtyHTML.isMention(tmpStrip):
+                    formatting = True
+                elif ParseDirtyHTML.isHashtag(tmpStrip):
+                    formatting = True
+                elif ParseDirtyHTML.isMoney(tmpStrip, "$", False):
+                    formatting = True
+                elif ParseDirtyHTML.isPunctuation(tmpStrip):
+                    formatting = True
+                elif ParseDirtyHTML.isCodeSimpleAssignmentOp(tmpStrip):
+                    formatting = True
+                elif ParseDirtyHTML.isNumber(tmpStrip):
+                    formatting = True
+                elif ParseDirtyHTML.isDomainLike(tmpStrip):
+                    formatting = True
+                if not formatting:
+                    tmp = translateCached(tmp, origLang, nextLang)
+                    #debug("  *translate chunk* " + tmp)
+                tmp = escape_only(tmp, "\\n")
                 if escapeQ is not None:
                     tmp = tmp.replace(escapeQ, "\\" + escapeQ)
                 nextValue += tmp
+        # NOTE: If *translated chunk* does NOT appear above for
+        #       any words in the phrase below, then all of the
+        #       chunks were (or the singular chunk if no html tags
+        #       were present was) determined to be formatting and
+        #       not actually translated.
+        debug("    *translated phrase* " + nextValue)
         gQ = origPhrase.gQ
         lQ = origPhrase.lQ
         kQ = origPhrase.kQ
@@ -825,6 +1192,10 @@ def main():
         nextPhrase = origPhrase.reconstruct(nextLang, nextValue)
         print(nextPhrase.toCode())
 
+    with open(trCachePath, 'w') as outs:
+        json.dump(trCache, outs, sort_keys=True, indent=2)
+    error("INFO: The cache was saved to \"{}\"".format(trCachePath))
 
 if __name__ == "__main__":
     main()
+
