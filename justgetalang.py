@@ -19,7 +19,7 @@ Contributing:
     output (See "usage").
 '''
 
-usage = '''
+usageStr = '''
 -------------------------------- USAGE --------------------------------
 This script processes a specified language and outputs the missing
 lines using Google Translate. The missing lines are determined by which
@@ -39,7 +39,16 @@ import sys
 import json
 import platform
 
-verbose = True
+verbose = False
+enable_web_cache = True
+
+def error(msg):
+    sys.stderr.write(msg + "\n")
+
+def debug(msg):
+    if not verbose:
+        return
+    sys.stderr.write(msg + "\n")
 
 trCache = {}
 trCachePath = 'trCache.json'
@@ -47,11 +56,65 @@ if os.path.isfile(trCachePath):
     with open(trCachePath) as ins:
         trCache = json.load(ins)
 
+def bugHelp():
+    error("--- INSTALL ---")
+    error("You must install googletrans such as via:")
+    # error("python3 -m pip install --user googletrans")
+    # ^ has "AttributeError: 'NoneType' object has no attribute 'group'"
+    #   on translator.translate
+    #   (Note that translator is a Translator instance).
+    error("# (See <https://stackoverflow.com/questions/52455774/googletrans-stopped-working-with-error-nonetype-object-has-no-attribute-group>)")
+    error("sudo python3 -m pip uninstall googletrans")
+    error("python3 -m pip uninstall -y googletrans")
+    #error("mkdir -p ~/Downloads/git/alainrouillon")
+    #error("cd ~/Downloads/git/alainrouillon")
+    #error("git clone https://github.com/alainrouillon/py-googletrans.git")
+    #error("cd ./py-googletrans")
+    #error("git checkout origin/feature/enhance-use-of-direct-api")
+    #error("python3 setup.py install --user")
+
+    #error("mkdir -p ~/Downloads/git/ssut")
+    #error("cd ~/Downloads/git/ssut")
+    #error("git clone https://github.com/ssut/py-googletrans.git")
+    #error("cd ./py-googletrans")
+    #error("python3 setup.py install --user")
+    # ^ according to stackoverflow answer, but doesn't work 2021-07-29
+
+    # So see <https://github.com/ssut/py-googletrans/issues/234#issuecomment-857352132>:
+    error("pip install googletrans==4.0.0rc1 --user")
+    error("--- TEST ---:")
+    error("import googletrans")
+    error("from googletrans import Translator")
+    error("translator = Translator()")
+    error("result = translator.translate('Hola')")
+    error("print(result.text)")
+    error("#If you still get the error \"AttributeError: 'NoneType' object has no attribute 'group'\" then check <https://stackoverflow.com/questions/52455774/googletrans-stopped-working-with-error-nonetype-object-has-no-attribute-group> for updated instructions.")
+
+
+try:
+    import googletrans
+except ModuleNotFoundError:
+    bugHelp()
+    exit(1)
+
+from googletrans import Translator
+
+translator = Translator()
+
 def _translate(value, fromLang, toLang):
     '''
     Translate value to toLang.
     '''
     debug("  *translate chunk* " + value)
+    try:
+        result = translator.translate(value)
+        value = result.text
+    except AttributeError as ex:
+        if "NoneType" in str(ex):
+            bugHelp()
+            exit(1)
+        else:
+            raise ex
     return value
 
 builtins_en_done = {}
@@ -141,7 +204,8 @@ def translateCached(value, fromLang, toLang):
     got = trCache[fromLang][toLang].get(value)
     if got is None:
         got = _translate(value, fromLang, toLang)
-        # trCache[fromLang][toLang][value] = got
+        if enable_web_cache:
+            trCache[fromLang][toLang][value] = got
     return preSpace + got + postSpace
 
 class DirtyHTML:
@@ -490,22 +554,6 @@ def set_verbose(v):
         raise ValueError("You must specify True or False (got {})."
                          "".format(value_to_py(v)))
 
-def error(msg):
-    sys.stderr.write(msg + "\n")
-
-def debug(msg):
-    if not verbose:
-        return
-    sys.stderr.write(msg + "\n")
-
-try:
-    import googletrans
-except ModuleNotFoundError:
-    print("You must install googletrans such as via:")
-    print("python3 -m pip install --user googletrans")
-    exit(1)
-
-from googletrans import Translator
 
 
 error("googletrans.LANGUAGES: " + json.dumps(googletrans.LANGUAGES))
@@ -530,8 +578,8 @@ langsPath = os.path.join(repoPath, "lang")
 
 
 def usage():
-    error(usage.format(
-        lang=langPath,
+    error(usageStr.format(
+        lang=langsPath,
         original_lang=origLang,
     ))
 
