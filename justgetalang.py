@@ -88,6 +88,8 @@ def bugHelp():
     error("translator = Translator()")
     error("result = translator.translate('Hola')")
     error("print(result.text)")
+    error("result = translator.translate('Hola', dest='pl')")
+    error("print(\"Polish:\" + result.text)")
     error("#If you still get the error \"AttributeError: 'NoneType' object has no attribute 'group'\" then check <https://stackoverflow.com/questions/52455774/googletrans-stopped-working-with-error-nonetype-object-has-no-attribute-group> for updated instructions.")
 
 
@@ -107,7 +109,7 @@ def _translate(value, fromLang, toLang):
     '''
     debug("  *translate chunk* " + value)
     try:
-        result = translator.translate(value)
+        result = translator.translate(value, dest=toLang)
         value = result.text
     except AttributeError as ex:
         if "NoneType" in str(ex):
