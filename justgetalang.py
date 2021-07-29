@@ -39,7 +39,51 @@ import sys
 import json
 import platform
 
+verbose = True
+
+
+def value_to_py(v, q='"'):
+    '''
+    Convert a value to a Python RValue ready to save to a py file.
+
+    Sequential arguments:
+    v -- the value of any type in its usable form
+
+    Keyword arguments:
+    q -- what quote mark to use on the value
+    '''
+    if v is None:
+        return "None"
+    elif v is True:
+        return "True"
+    elif v is False:
+        return "False"
+    try:
+        tmp = v.strip()
+        # ^ If there is no AttributeError, assume it is a string.
+        v = v.replace(q, "\\"+q)  # Escape the quotes.
+        return q + v + q
+    except AttributeError:
+        if isinstance(v, (int, float)):
+            return v
+        return repr(v)
+
+
+def set_verbose(v):
+    if v is True:
+        verbose = True
+    elif v is False:
+        verbose = False
+    else:
+        raise ValueError("You must specify True or False (got {})."
+                         "".format(value_to_py(v)))
+
 def error(msg):
+    sys.stderr.write(msg + "\n")
+
+def debug(msg):
+    if not verbose:
+        return
     sys.stderr.write(msg + "\n")
 
 try:
@@ -52,8 +96,8 @@ except ModuleNotFoundError:
 from googletrans import Translator
 
 
-print("googletrans.LANGUAGES: " + json.dumps(googletrans.LANGUAGES))
-print("")
+error("googletrans.LANGUAGES: " + json.dumps(googletrans.LANGUAGES))
+error("")
 
 original = "pl"
 profile = None
@@ -206,7 +250,8 @@ class JGALPack:
         lang -- This language must be a valid language id string such
                 as recognized by Google Translate.
         '''
-        self.phrases = []
+        self.phrases = {}
+        self.keys = []  # This list exists to keep the keys in order.
         globalsName = JGALPack.globalsName
         translationsKey = JGALPack.translationsKey
         translationsSymbol = "{}[".format(globalsName)
@@ -246,7 +291,7 @@ class JGALPack:
                 indent = line[:spacingLen]
                 inLine = line.rstrip("\n\r\f")
                 if not line.startswith(translationsSymbol):
-                    print("Doesn't start with \"{}\": \"{}\""
+                    debug("[verbose] Doesn't start with \"{}\": \"{}\""
                           "".format(translationsSymbol, line))
                     extras.append(inLine)
                     continue
@@ -265,7 +310,6 @@ class JGALPack:
                                         gFound[2], line[gFound[0]-1]))
                     extras.append(inLine)
                     continue
-
 
                 debugStr = line[gFound[0]:gFound[1]]
                 if debugStr != translationsKey:
@@ -293,8 +337,6 @@ class JGALPack:
                           "".format(self.path, lineN, preLangI+CO))
                     extras.append(inLine)
                     continue
-
-
 
                 lFound = find_quoted_not_escaped(line, preLangI)
 
@@ -347,7 +389,7 @@ class JGALPack:
                     continue
 
                 key = line[kFound[0]:kFound[1]]
-                # error("key:{}".format(key))
+                # debug("key:{}".format(key))
                 # ^ The value of key is now "some_key" excluding quotes.
                 keyQ = kFound[2]
                 closeBI = find_non_whitespace(line, kFound[1] + 1)
@@ -385,8 +427,12 @@ class JGALPack:
                                     line[signI]))
                     extras.append(inLine)
                     continue
-                value = line[vFound[0]:vFound[1]]
-                print("got: {} {}=\"{}\"".format(debugStr, key, value))
+                rawV = line[vFound[0]:vFound[1]]
+                value = rawV.replace("\\"+vFound[2], vFound[2])
+                debug("{}:{}:{}: [verbose] got: ['{}']['{}']['{}']={}"
+                      "".format(self.path, lineN, signI+CO,
+                                debugStr, debugLang, key,
+                                value_to_py(value, q="'")))
                 suffix = ""
                 lastCBI = find_non_whitespace(line, vFound[1]+1)
                 if lastCBI > -1:
@@ -399,16 +445,17 @@ class JGALPack:
                 phrase = JGALPhrase(debugLang, key, value, gFound[2],
                                     lFound[2], kFound[2], vFound[2],
                                     extras, indent, suffix)
-                self.phrases.append(phrase)
+                self.phrases[key] = phrase
+                self.keys.append(key)
                 extras = []
                 indent = None
                 suffix = None
 
-        error("  * JGALPack init processed {} line(s)"
+        error("INFO: JGALPack init processed {} line(s)"
               " in \"{}\" that started with \"{}\" and got"
               " {} phrase(s)"
               "".format(count, self.path, translationsSymbol,
-                        len(self.phrases)))
+                        len(self.keys)))
 
     @classmethod
     def existingLangs(cls, ignore_langs=None):
@@ -480,7 +527,7 @@ def main():
     #         continue
     #     if nextSub == origLangSub:
     #         continue
-    #     print("* analyzing \"{}\"...".format(nextSub))
+    #     error("* analyzing \"{}\"...".format(nextSub))
     #     #result = translator.translate(srcVal)
     thisDotExt = JGALPack.langDotExt
     if not nextSub.lower().endswith(JGALPack.langDotExt.lower()):
@@ -489,8 +536,20 @@ def main():
         thisDotExt = os.path.splitext(nextSub)[1]
     else:
         nextLang = nextSub[:-len(JGALPack.langDotExt)]
-    print("* analyzing \"{}\"...".format(nextPath))
+
+    error("INFO: analyzing \"{}\"...".format(nextPath))
     nextPack = JGALPack(langsPath, nextSub, nextLang)
+    error("INFO: analyzing \"{}\"...".format(origLangPath))
+    origPack = JGALPack(langsPath, origLangSub, original)
+    for key in origPack.keys:
+        nextPhrase = nextPack.phrases.get(key)
+        # ^ See if the original language key is in the target language.
+        if nextPhrase is not None:
+            # It already is in the target.
+            continue
+        # nextPhrase is None, so generate it through translation.
+        origPhrase = origPack.phrases[key]
+        print("translate {}".format(origPhrase.value))
 
 
 if __name__ == "__main__":
