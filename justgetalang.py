@@ -24,13 +24,14 @@ usageStr = '''
 This script processes a specified language and outputs the missing
 lines using Google Translate. The missing lines are determined by which
 lines are in {original_lang}.php but not in the specified target
-language + ".php".
+language + ".php". The target language is specified after the "--to"
+option as shown in the example(s).
 
 Specify a language that exists in the {lang} directory under the
 current directory.
 
 Example:
-  python3 justgetalang.py en
+  ./justgetalang.py --from de --to en
 '''
 
 
@@ -64,6 +65,7 @@ def bugHelp():
     #   on translator.translate
     #   (Note that translator is a Translator instance).
     error("# (See <https://stackoverflow.com/questions/52455774/googletrans-stopped-working-with-error-nonetype-object-has-no-attribute-group>)")
+    error("# uninstall potential non-release versions:")
     error("sudo python3 -m pip uninstall googletrans")
     error("python3 -m pip uninstall -y googletrans")
     #error("mkdir -p ~/Downloads/git/alainrouillon")
@@ -81,6 +83,7 @@ def bugHelp():
     # ^ according to stackoverflow answer, but doesn't work 2021-07-29
 
     # So see <https://github.com/ssut/py-googletrans/issues/234#issuecomment-857352132>:
+    error("# install a release version known to be compatible:")
     error("pip install googletrans==4.0.0rc1 --user")
     error("--- TEST ---:")
     error("import googletrans")
@@ -711,7 +714,7 @@ class JGALPhrase:
         self.indent = builder.indent
         self.suffix = builder.suffix
         self.globalsName = builder.globalsName
-        self.translationsKey = builder.translationsKey
+        self.languagesKey = builder.languagesKey
         self.langDotExt = builder.langDotExt
         self.lineN = builder.lineN
         self.vCol = builder.vCol
@@ -733,7 +736,7 @@ class JGALPhrase:
         builder.indent = self.indent
         builder.suffix = self.suffix
         builder.globalsName = self.globalsName
-        builder.translationsKey = self.translationsKey
+        builder.languagesKey = self.languagesKey
         builder.langDotExt = self.langDotExt
         builder.lineN = self.lineN
         return builder.build()
@@ -745,7 +748,7 @@ class JGALPhrase:
         semicolon if the line in the original program did).
         '''
         return (self.indent + self.globalsName + '[' + self.gQ +
-                self.translationsKey + self.gQ + ']['
+                self.languagesKey + self.gQ + ']['
                 + self.lQ + self.lang + self.lQ + ']['
                 + self.kQ + self.key + self.kQ + '] = '
                 + self.vToPy(self.value) + self.suffix)
@@ -791,45 +794,74 @@ class JGALPack:
 
     existingLangsWarn = True
     default_globalsName = '$GLOBALS'
-    default_translationsKey = 'translations'
+    default_languagesKey = 'translations'
     default_langDotExt = ".php"
     CO = 0  # Set this to 1 if 1st column is 1 in your code editor.
 
     def getPath(self):
         return os.path.join(self.langs_path, self.lang + self.dotExt)
 
-    def __init__(self, langs_path, sub, lang,
-                 globalsName=None,
-                 translationsKey=None):
+    def __init__(self, langs_path, sub, lang, options,
+                 globalsName=None, languagesKey=None):
         '''
         Sequential arguments:
         langs_path -- This must contain the language file named sub.
         sub -- This language file must be in langs_path.
-        lang -- This language must be a valid language id string such
-                as recognized by Google Translate. It is used as the
-                key within the translations associative array.
+        lang -- This language must be a valid language id string
+                such as recognized by Google Translate. It is used as
+                the key within the translations associative array.
+        options -- Additional options can have the following keys:
+            'from': ignored since there are two calls to __init__.
+                See lang instead.
+            'to': ignored since there are two calls to __init__.
+                See lang instead.
+            'extension': Set the file extension for language files.
+            'dictionary': Specify the globals dictionary name such as
+                "$GLOBALS".
+            'languages-key': They key in the globals dictionary which
+                contains all languages (specify 'translations' to use
+                GLOBALS['translations'][lang]).
 
         Keyword arguments:
         globalsName -- the name of the globals object in your code, such
                        as $GLOBALS
-        translationsKey -- the key in the globals that accesses the
+        languagesKey -- the key in the globals that accesses the
                            entire translations associative array
         '''
+        newExt = options.get('extension')
+        if newExt is None:
+            self.langDotExt = JGALPack.default_langDotExt
+            error("Warning: The 'extension' option wasn't specified,"
+                  " so the default \"{}\" will be used."
+                  "".format(self.langDotExt[1:]))
+        else:
+            self.langDotExt = "." + newExt.lower()
+        globalsName = options.get("dictionary")
         if globalsName is None:
             globalsName = JGALPack.default_globalsName
+            error("Warning: The 'dictionary' option wasn't specified,"
+                  " so the default \"{}\" will be used."
+                  "".format(globalsName))
+
         self.globalsName = globalsName
-        if translationsKey is None:
-            translationsKey = JGALPack.default_translationsKey
-        self.translationsKey = translationsKey
+        languagesKey = options.get('languages-key')
+        if languagesKey is None:
+            languagesKey = JGALPack.default_languagesKey
+            error("Warning: The 'languages-key' option"
+                  " wasn't specified,"
+                  " so the default \"{}\" will be used."
+                  "".format(languagesKey))
+        self.languagesKey = languagesKey
         self.phrases = {}
         self.keys = []  # This list exists to keep the keys in order.
         translationsSymbol = "{}[".format(globalsName)
         # The full opening is: translationsSymbol
-        #                      + "['"+translationsKey+"']"
+        #                      + "['"+languagesKey+"']"
         # but they can be either single quotes or double quotes, so
         # search for them.
-        if not sub.lower().endswith(".php"):
-            error("  * Warning in {}: only PHP is known for sure."
+        if not sub.lower().endswith(self.langDotExt):
+            error("  * Warning in {}: only PHP/Python"
+                  " are known for sure."
                   " The format that is required"
                   " (and that will be attempted anyway) is:"
                   " {}['key'] = 'value'"
@@ -882,11 +914,11 @@ class JGALPack:
                     continue
 
                 debugStr = line[gFound[0]:gFound[1]]
-                if debugStr != translationsKey:
+                if debugStr != languagesKey:
                     error("{}:{}:{}: WARNING: expected"
                           " the key {} in {}."
                           "".format(self.path, lineN, kFound[0]+CO,
-                                    translationsKey,
+                                    languagesKey,
                                     translationsSymbol))
                     extras.append(inLine)
                     continue
@@ -919,7 +951,7 @@ class JGALPack:
                               "".format(self.path, lineN, lFound[0]+CO,
                                         lFound[2], line[lFound[0]-1],
                                         translationsSymbol,
-                                        translationsKey))
+                                        languagesKey))
                     extras.append(inLine)
                     continue
                 debugLang = line[lFound[0]:lFound[1]]
@@ -954,7 +986,7 @@ class JGALPack:
                               "".format(self.path, lineN, kFound[0]+CO,
                                         kFound[2], line[kFound[0]-1],
                                         translationsSymbol,
-                                        translationsKey))
+                                        languagesKey))
                     extras.append(inLine)
                     continue
 
@@ -1023,7 +1055,7 @@ class JGALPack:
                 builder.indent = indent
                 builder.suffix = suffix
                 builder.globalsName = self.globalsName
-                builder.translationsKey = self.translationsKey
+                builder.languagesKey = self.languagesKey
                 builder.langDotExt = self.dotExt
                 builder.lineN = lineN
                 builder.vCol = vFound[0] + CO
@@ -1042,7 +1074,7 @@ class JGALPack:
                         len(self.keys)))
 
     @classmethod
-    def existingLangs(cls, ignore_langs=None):
+    def existingLangs(cls, langDotExt, ignore_langs=None):
         dirs = list(os.listdir(langsPath))
         langs = []
         for d in dirs:
@@ -1051,16 +1083,16 @@ class JGALPack:
                 continue
             if d in ignores:
                 continue
-            if not d.lower().endswith(cls.default_langDotExt.lower()):
+            if not d.lower().endswith(langDotExt.lower()):
                 if cls.existingLangsWarn:
                     print("WARNING: list langs ignored the file \"{}\""
                           " since it is not a {} file."
-                          "".format(d, cls.default_langDotExt))
+                          "".format(d, langDotExt))
                 continue
             if ignore_langs is not None:
                 if d in ignore_langs:
                     continue
-            langs.append(d[:-len(cls.default_langDotExt)])
+            langs.append(d[:-len(langDotExt)])
         cls.existingLangsWarn = False
         return langs
 
@@ -1109,16 +1141,49 @@ def unescape_only(s, seq):
 
 
 def main():
-    if len(sys.argv) < 2:
+    global origLang
+    global langsPath
+    nextLang = None
+    langDotExt = JGALPack.default_langDotExt
+    options = {}
+    booleans = []
+    argName = None
+    i = 1
+    while i < len(sys.argv):
+        arg = sys.argv[i]
+        if argName is not None:
+            options[argName] = arg
+            argName = None
+        elif arg.startswith("--"):
+            argName = arg[2:]
+        i += 1
+    error("* using options: {}".format(options))
+    newFrom = options.get('from')
+    if newFrom is not None:
+        origLang = newFrom
+    newTo = options.get('to')
+    if newTo is not None:
+        nextLang = newTo
+    else:
         usage()
         error("")
-        raise ValueError("Error: You must specify a language to check.")
-    nextLang = sys.argv[1]
-    langDotExt = JGALPack.default_langDotExt
+        raise ValueError("Error: You must specify a language to check"
+                         " after the '--to' option.")
+    newExt = options.get('extension')
+    if newExt is not None:
+        langDotExt = "." + newExt
+    error("* using langDotExt: \"{}\"".format(langDotExt ))
     origLangSub = origLang + langDotExt
+    tryOrigLangPath = os.path.join(".", origLangSub)
+    if os.path.isfile(tryOrigLangPath):
+        langsPath = os.path.abspath(".")
+        error("* detected langs path \"{}\""
+              "".format(langsPath))
+        error("  * detected lang file \"{}\""
+              "".format(origLangSub))
     origLangPath = os.path.join(langsPath, origLangSub)
     if nextLang == origLang:
-        langs = existingLangs([origLangSub])
+        langs = existingLangs([origLangSub], langDotExt)
         usage()
         error("")
         raise ValueError("You must specify a language to check, but"
@@ -1132,7 +1197,8 @@ def main():
         usage()
         error("")
         raise ValueError("Error: There is no \"{}\"."
-                         " Create it then try again."
+                         " Create it then try again"
+                         " (It can be empty)."
                          "".format(nextPath))
     if not os.path.isdir(langsPath):
         usage()
@@ -1166,11 +1232,12 @@ def main():
         nextLang = nextSub[:-len(langDotExt)]
 
     error("INFO: analyzing \"{}\"...".format(nextPath))
-    nextPack = JGALPack(langsPath, nextSub, nextLang)
+    nextPack = JGALPack(langsPath, nextSub, nextLang, options)
     error("INFO: analyzing \"{}\"...".format(origLangPath))
-    origPack = JGALPack(langsPath, origLangSub, origLang)
+    origPack = JGALPack(langsPath, origLangSub, origLang, options)
     newCount = 0
     for key in origPack.keys:
+        # ^ Keys is a list (origPack is an object not a dict).
         nextPhrase = nextPack.phrases.get(key)
         # ^ See if the original language key is in the target language.
         if nextPhrase is not None:
@@ -1254,9 +1321,12 @@ def main():
               " so you will have to paste them into the file."
               "".format(newCount, origLang, nextPack.getPath()))
     else:
-        error("INFO: All keys from the original language file \"{}\""
+        origCount = len(origPack.keys)
+        # ^ Keys is a list (origPack is an object not a dict).
+        error("INFO: All {} keys from the original language file \"{}\""
               " are in \"{}\" (There is nothing to do)."
-              "".format(origPack.getPath(), nextPack.getPath()))
+              "".format(origCount, origPack.getPath(),
+                        nextPack.getPath()))
 
 if __name__ == "__main__":
     main()

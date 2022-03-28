@@ -1,8 +1,15 @@
 # justgetalang
 Can't we all just get a lang? Make one language php file from another using Google Translate's automatic translation via the `googletrans` PyPI package.
 
+
 ## License
 This program is GPL v2.1 or higher.
+
+
+## Projects using this
+- Poikilos' AngularCMS fork
+- Poikilos' Getriebe fork
+
 
 ## Use
 This program will mimic and translate any files using the syntax: `{globalsName}['{translationsKey}']['key'] = 'value'` where `key` is any language key compatible with Google Translate such as 'en' or 'pl'.
