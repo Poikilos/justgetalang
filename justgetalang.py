@@ -43,13 +43,16 @@ import platform
 verbose = False
 enable_web_cache = True
 
-def error(msg):
-    sys.stderr.write(msg + "\n")
 
-def debug(msg):
+def error(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
+
+
+def debug(*args, **kwargs):
     if not verbose:
         return
-    sys.stderr.write(msg + "\n")
+    print(*args, file=sys.stderr, **kwargs)
+
 
 trCache = {}
 trCachePath = 'trCache.json'
@@ -1040,8 +1043,10 @@ class JGALPack:
                 if lastCBI > -1:
                     suffix = line[lastCBI+1:]
                 else:
-                    error("{}:{}:{}: ']' was expected after the key."
-                          "".format(self.path, lineN, vFound[1]+1+CO))
+                    error("{}:{}:{}: ']' was expected after the key"
+                          " (lastCBI={}, line=\"{}\")."
+                          "".format(self.path, lineN, vFound[1]+1+CO,
+                                    lastCBI, line))
                 # ^ the last closing bracket's index
                 builder = JGALPhraseBuilder()
                 builder.lang = debugLang
