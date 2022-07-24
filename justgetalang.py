@@ -40,16 +40,16 @@ import sys
 import json
 import platform
 
-verbose = False
+verbosity = False
 enable_web_cache = True
 
 
-def error(*args, **kwargs):
+def echo0(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
 
-def debug(*args, **kwargs):
-    if not verbose:
+def echo1(*args, **kwargs):
+    if verbosity < 1:
         return
     print(*args, file=sys.stderr, **kwargs)
 
@@ -61,42 +61,42 @@ if os.path.isfile(trCachePath):
         trCache = json.load(ins)
 
 def bugHelp():
-    error("--- INSTALL ---")
-    error("You must install googletrans such as via:")
-    # error("python3 -m pip install --user googletrans")
+    echo0("--- INSTALL ---")
+    echo0("You must install googletrans such as via:")
+    # echo0("python3 -m pip install --user googletrans")
     # ^ has "AttributeError: 'NoneType' object has no attribute 'group'"
     #   on translator.translate
     #   (Note that translator is a Translator instance).
-    error("# (See <https://stackoverflow.com/questions/52455774/googletrans-stopped-working-with-error-nonetype-object-has-no-attribute-group>)")
-    error("# uninstall potential non-release versions:")
-    error("sudo python3 -m pip uninstall googletrans")
-    error("python3 -m pip uninstall -y googletrans")
-    #error("mkdir -p ~/Downloads/git/alainrouillon")
-    #error("cd ~/Downloads/git/alainrouillon")
-    #error("git clone https://github.com/alainrouillon/py-googletrans.git")
-    #error("cd ./py-googletrans")
-    #error("git checkout origin/feature/enhance-use-of-direct-api")
-    #error("python3 setup.py install --user")
+    echo0("# (See <https://stackoverflow.com/questions/52455774/googletrans-stopped-working-with-error-nonetype-object-has-no-attribute-group>)")
+    echo0("# uninstall potential non-release versions:")
+    echo0("sudo python3 -m pip uninstall googletrans")
+    echo0("python3 -m pip uninstall -y googletrans")
+    #echo0("mkdir -p ~/Downloads/git/alainrouillon")
+    #echo0("cd ~/Downloads/git/alainrouillon")
+    #echo0("git clone https://github.com/alainrouillon/py-googletrans.git")
+    #echo0("cd ./py-googletrans")
+    #echo0("git checkout origin/feature/enhance-use-of-direct-api")
+    #echo0("python3 setup.py install --user")
 
-    #error("mkdir -p ~/Downloads/git/ssut")
-    #error("cd ~/Downloads/git/ssut")
-    #error("git clone https://github.com/ssut/py-googletrans.git")
-    #error("cd ./py-googletrans")
-    #error("python3 setup.py install --user")
+    #echo0("mkdir -p ~/Downloads/git/ssut")
+    #echo0("cd ~/Downloads/git/ssut")
+    #echo0("git clone https://github.com/ssut/py-googletrans.git")
+    #echo0("cd ./py-googletrans")
+    #echo0("python3 setup.py install --user")
     # ^ according to stackoverflow answer, but doesn't work 2021-07-29
 
     # So see <https://github.com/ssut/py-googletrans/issues/234#issuecomment-857352132>:
-    error("# install a release version known to be compatible:")
-    error("pip install googletrans==4.0.0rc1 --user")
-    error("--- TEST ---:")
-    error("import googletrans")
-    error("from googletrans import Translator")
-    error("translator = Translator()")
-    error("result = translator.translate('Hola')")
-    error("print(result.text)")
-    error("result = translator.translate('Hola', dest='pl')")
-    error("print(\"Polish:\" + result.text)")
-    error("#If you still get the error \"AttributeError: 'NoneType' object has no attribute 'group'\" then check <https://stackoverflow.com/questions/52455774/googletrans-stopped-working-with-error-nonetype-object-has-no-attribute-group> for updated instructions.")
+    echo0("# install a release version known to be compatible:")
+    echo0("pip install googletrans==4.0.0rc1 --user")
+    echo0("--- TEST ---:")
+    echo0("import googletrans")
+    echo0("from googletrans import Translator")
+    echo0("translator = Translator()")
+    echo0("result = translator.translate('Hola')")
+    echo0("print(result.text)")
+    echo0("result = translator.translate('Hola', dest='pl')")
+    echo0("print(\"Polish:\" + result.text)")
+    echo0("#If you still get the error \"AttributeError: 'NoneType' object has no attribute 'group'\" then check <https://stackoverflow.com/questions/52455774/googletrans-stopped-working-with-error-nonetype-object-has-no-attribute-group> for updated instructions.")
 
 
 try:
@@ -113,7 +113,7 @@ def _translate(value, fromLang, toLang):
     '''
     Translate value to toLang.
     '''
-    debug("  *translate chunk* " + value)
+    echo1("  *translate chunk* " + value)
     try:
         result = translator.translate(value, dest=toLang)
         value = result.text
@@ -440,7 +440,7 @@ class ParseDirtyHTML:
                            " occurred before the previous one"
                            " was closed in \"{}\""
                            "".format(data))
-                    error(prefix)
+                    echo0(prefix)
                     # ^ Don't show the location using "SyntaxError",
                     #   since that would put "SyntaxError: " before it.
                     raise SyntaxError(msg)
@@ -467,7 +467,7 @@ class ParseDirtyHTML:
                            " before an opening bracket"
                            " in \"{}\""
                            "".format(data))
-                    error(prefix)
+                    echo0(prefix)
                     # ^ Don't show the location using "SyntaxError",
                     #   since that would put "SyntaxError: " before it.
                     raise SyntaxError(msg)
@@ -509,7 +509,7 @@ class ParseDirtyHTML:
         if self._in_fmt != DirtyHTML.FMT_TEXT:
             prefix = "{}:{}:{}: ".format(self.path, self.lineN,
                                          start+self.offset)
-            error(prefix)
+            echo0(prefix)
             raise SyntaxError("The line ends without closing the"
                               "{} tag that starts here."
                               "".format(self._in_fmt))
@@ -546,26 +546,28 @@ def value_to_py(v, q='"'):
         return repr(v)
 
 
-def set_verbose(v):
+def set_verbosity(v):
     '''
-    Set whether to show verbose output.
+    Set whether to show verbosity output.
     This function requires value_to_py.
 
     Sequential arguments:
     v -- True for on, False for no output from the debug function.
     '''
+    global verbosity
     if v is True:
-        verbose = True
+        verbosity = 1
     elif v is False:
-        verbose = False
+        verbosity = 0
     else:
-        raise ValueError("You must specify True or False (got {})."
-                         "".format(value_to_py(v)))
+        verbosity = int(v)
+        # raise ValueError("You must specify True or False (got {})."
+        #                  "".format(value_to_py(v)))
 
 
 
-error("googletrans.LANGUAGES: " + json.dumps(googletrans.LANGUAGES))
-error("")
+echo0("googletrans.LANGUAGES: " + json.dumps(googletrans.LANGUAGES))
+echo0("")
 
 origLang = "pl"
 profile = None
@@ -578,7 +580,7 @@ tryPath = os.path.join(reposPath, "AngularCMS")
 
 repoPath = os.path.dirname(os.path.realpath(__file__))
 if os.path.isdir(tryPath):
-    error("INFO: The path is automatically changing"
+    echo0("INFO: The path is automatically changing"
           " from \"{}\" to the detected \"{}\"."
           "".format(repoPath, tryPath))
     repoPath = tryPath
@@ -586,7 +588,7 @@ langsPath = os.path.join(repoPath, "lang")
 
 
 def usage():
-    error(usageStr.format(
+    echo0(usageStr.format(
         lang=langsPath,
         original_lang=origLang,
     ))
@@ -834,7 +836,7 @@ class JGALPack:
         newExt = options.get('extension')
         if newExt is None:
             self.langDotExt = JGALPack.default_langDotExt
-            error("Warning: The 'extension' option wasn't specified,"
+            echo0("Warning: The 'extension' option wasn't specified,"
                   " so the default \"{}\" will be used."
                   "".format(self.langDotExt[1:]))
         else:
@@ -842,7 +844,7 @@ class JGALPack:
         globalsName = options.get("dictionary")
         if globalsName is None:
             globalsName = JGALPack.default_globalsName
-            error("Warning: The 'dictionary' option wasn't specified,"
+            echo0("Warning: The 'dictionary' option wasn't specified,"
                   " so the default \"{}\" will be used."
                   "".format(globalsName))
 
@@ -850,7 +852,7 @@ class JGALPack:
         languagesKey = options.get('languages-key')
         if languagesKey is None:
             languagesKey = JGALPack.default_languagesKey
-            error("Warning: The 'languages-key' option"
+            echo0("Warning: The 'languages-key' option"
                   " wasn't specified,"
                   " so the default \"{}\" will be used."
                   "".format(languagesKey))
@@ -863,7 +865,7 @@ class JGALPack:
         # but they can be either single quotes or double quotes, so
         # search for them.
         if not sub.lower().endswith(self.langDotExt):
-            error("  * Warning in {}: only PHP/Python"
+            echo0("  * Warning in {}: only PHP/Python"
                   " are known for sure."
                   " The format that is required"
                   " (and that will be attempted anyway) is:"
@@ -896,7 +898,7 @@ class JGALPack:
                 indent = line[:spacingLen]
                 inLine = line.rstrip("\n\r\f")
                 if not line.startswith(translationsSymbol):
-                    debug("[verbose] Doesn't start with \"{}\": \"{}\""
+                    echo1("[verbose] Doesn't start with \"{}\": \"{}\""
                           "".format(translationsSymbol, line))
                     extras.append(inLine)
                     continue
@@ -908,7 +910,7 @@ class JGALPack:
                 #   using quote gFound[2].
                 if gFound[1] < 0:
                     if gFound[0] > -1:
-                        error("{}:{}:{}: The closing {} around the"
+                        echo0("{}:{}:{}: The closing {} around the"
                               " translations key after the opening"
                               " {} was missing."
                               "".format(self.path, lineN, gFound[0]+CO,
@@ -918,7 +920,7 @@ class JGALPack:
 
                 debugStr = line[gFound[0]:gFound[1]]
                 if debugStr != languagesKey:
-                    error("{}:{}:{}: WARNING: expected"
+                    echo0("{}:{}:{}: WARNING: expected"
                           " the key {} in {}."
                           "".format(self.path, lineN, kFound[0]+CO,
                                     languagesKey,
@@ -929,14 +931,14 @@ class JGALPack:
                 # ^ the first closing bracket's index
                 # if line[firstCBI] != "]":
                 if (firstCBI < 0) or (line[firstCBI]!="]"):
-                    error("{}:{}:{}: A closing bracket is expected"
+                    echo0("{}:{}:{}: A closing bracket is expected"
                           "after the quoted translations key."
                           "".format(self.path, lineN, gFound[1]+1+CO))
                     extras.append(inLine)
                     continue
                 preLangI = firstCBI + 1
                 if (preLangI >= len(line)) or (line[preLangI]!="["):
-                    error("{}:{}:{}: An opening bracket is expected"
+                    echo0("{}:{}:{}: An opening bracket is expected"
                           " after the close bracket after"
                           " the translations key."
                           "".format(self.path, lineN, preLangI+CO))
@@ -947,7 +949,7 @@ class JGALPack:
 
                 if lFound[1] < 0:
                     if lFound[0] > -1:
-                        error("{}:{}:{}: WARNING: The closing {}"
+                        echo0("{}:{}:{}: WARNING: The closing {}"
                               " around the language after the opening"
                               " {} was missing. Maybe it is the"
                               " declaration of {}['{}']"
@@ -959,7 +961,7 @@ class JGALPack:
                     continue
                 debugLang = line[lFound[0]:lFound[1]]
                 if debugLang != lang:
-                    error("{}:{}:{}: ERROR: The lang '{}' was expected"
+                    echo0("{}:{}:{}: ERROR: The lang '{}' was expected"
                           " but the line specifies '{}'."
                           "".format(self.path, lineN, lFound[0]+CO,
                                     lang,
@@ -969,7 +971,7 @@ class JGALPack:
 
                 keyCBI = find_non_whitespace(line, lFound[1]+1)
                 if (keyCBI < 0) or (line[keyCBI]!="]"):
-                    error("{}:{}:{}: A closing bracket is expected"
+                    echo0("{}:{}:{}: A closing bracket is expected"
                           "after the quoted language."
                           "".format(self.path, lineN, lFound[1]+1+CO))
                     extras.append(inLine)
@@ -982,7 +984,7 @@ class JGALPack:
                 #   using quote kFound[2].
                 if kFound[1] < 0:
                     if kFound[0] > -1:
-                        error("{}:{}:{}: WARNING: The closing {}"
+                        echo0("{}:{}:{}: WARNING: The closing {}"
                               " around the key after the opening"
                               " {} was missing. Maybe it is the"
                               " declaration of {}['{}']"
@@ -994,7 +996,7 @@ class JGALPack:
                     continue
 
                 key = line[kFound[0]:kFound[1]]
-                # debug("key:{}".format(key))
+                # echo1("key:{}".format(key))
                 # ^ The value of key is now "some_key" excluding quotes.
                 keyQ = kFound[2]
                 closeBI = find_non_whitespace(line, kFound[1] + 1)
@@ -1002,30 +1004,30 @@ class JGALPack:
                 #   The key.
                 # if kFound[1] + 3 >= len(line):
                 if closeBI < 0:
-                    error("{}:{}:{}: The line ended after the key"
+                    echo0("{}:{}:{}: The line ended after the key"
                           " but before the value."
                           "".format(self.path, lineN, kFound[1]+CO))
                 if line[closeBI] != "]":
-                    error("{}:{}:{}: A closing bracket was expected."
+                    echo0("{}:{}:{}: A closing bracket was expected."
                           "".format(self.path, lineN, closeBI+CO))
                 signI = find_non_whitespace(line, closeBI+1)
                 # if (closeBI+1>=len(line)) or (line[closeBI+1] != "="):
                 if (signI < 0) or (line[signI] != "="):
-                    error("{}:{}:{}: '=' was expected after ']'"
+                    echo0("{}:{}:{}: '=' was expected after ']'"
                           " but got \"{}\"."
                           "".format(self.path, lineN, closeBI+1+CO,
                                     line[closeBI+1:]))
                 vFound = find_quoted_not_escaped(line, signI+1)
                 if vFound[1] < 0:
                     if vFound[0] > -1:
-                        error("{}:{}:{}: The closing {}"
+                        echo0("{}:{}:{}: The closing {}"
                               " around the value after the opening"
                               " {} was missing."
                               "".format(self.path, lineN, signI+1+CO,
                                         vFound[2], line[vFound[0]]))
                         extras.append(inLine)
                         continue
-                    error("{}:{}:{}: The opening quote"
+                    echo0("{}:{}:{}: The opening quote"
                           " for the value after "
                           " '{}' was missing."
                           "".format(self.path, lineN, signI+1+CO,
@@ -1034,7 +1036,7 @@ class JGALPack:
                     continue
                 rawV = line[vFound[0]:vFound[1]]
                 value = rawV.replace("\\"+vFound[2], vFound[2])
-                debug("{}:{}:{}: [verbose] got: ['{}']['{}']['{}']={}"
+                echo1("{}:{}:{}: [verbose] got: ['{}']['{}']['{}']={}"
                       "".format(self.path, lineN, signI+CO,
                                 debugStr, debugLang, key,
                                 value_to_py(value, q="'")))
@@ -1043,7 +1045,7 @@ class JGALPack:
                 if lastCBI > -1:
                     suffix = line[lastCBI+1:]
                 else:
-                    error("{}:{}:{}: ']' was expected after the key"
+                    echo0("{}:{}:{}: ']' was expected after the key"
                           " (lastCBI={}, line=\"{}\")."
                           "".format(self.path, lineN, vFound[1]+1+CO,
                                     lastCBI, line))
@@ -1072,7 +1074,7 @@ class JGALPack:
                 indent = None
                 suffix = None
 
-        error("INFO: JGALPack init processed {} line(s)"
+        echo0("INFO: JGALPack init processed {} line(s)"
               " in \"{}\" that started with \"{}\" and got"
               " {} phrase(s)"
               "".format(count, self.path, translationsSymbol,
@@ -1162,7 +1164,7 @@ def main():
         elif arg.startswith("--"):
             argName = arg[2:]
         i += 1
-    error("* using options: {}".format(options))
+    echo0("* using options: {}".format(options))
     newFrom = options.get('from')
     if newFrom is not None:
         origLang = newFrom
@@ -1171,26 +1173,26 @@ def main():
         nextLang = newTo
     else:
         usage()
-        error("")
+        echo0("")
         raise ValueError("Error: You must specify a language to check"
                          " after the '--to' option.")
     newExt = options.get('extension')
     if newExt is not None:
         langDotExt = "." + newExt
-    error("* using langDotExt: \"{}\"".format(langDotExt ))
+    echo0("* using langDotExt: \"{}\"".format(langDotExt ))
     origLangSub = origLang + langDotExt
     tryOrigLangPath = os.path.join(".", origLangSub)
     if os.path.isfile(tryOrigLangPath):
         langsPath = os.path.abspath(".")
-        error("* detected langs path \"{}\""
+        echo0("* detected langs path \"{}\""
               "".format(langsPath))
-        error("  * detected lang file \"{}\""
+        echo0("  * detected lang file \"{}\""
               "".format(origLangSub))
     origLangPath = os.path.join(langsPath, origLangSub)
     if nextLang == origLang:
         langs = existingLangs([origLangSub], langDotExt)
         usage()
-        error("")
+        echo0("")
         raise ValueError("You must specify a language to check, but"
                          " you specified the original language ({})."
                          " You must specify a language such as one "
@@ -1200,19 +1202,19 @@ def main():
     nextPath = os.path.join(langsPath, nextSub)
     if not os.path.isfile(nextPath):
         usage()
-        error("")
+        echo0("")
         raise ValueError("Error: There is no \"{}\"."
                          " Create it then try again"
                          " (It can be empty)."
                          "".format(nextPath))
     if not os.path.isdir(langsPath):
         usage()
-        error("")
+        echo0("")
         raise RuntimeError("Error: langsPath \"{}\" is missing."
                            "".format(langsPath))
     if not os.path.isfile(origLangPath):
         usage()
-        error("")
+        echo0("")
         raise ValueError("Error: \"{}\" is missing (origLang={},"
                          " langDotExt={})"
                          "".format(origLangPath, origLang,
@@ -1226,7 +1228,7 @@ def main():
     #         continue
     #     if nextSub == origLangSub:
     #         continue
-    #     error("* analyzing \"{}\"...".format(nextSub))
+    #     echo0("* analyzing \"{}\"...".format(nextSub))
     #     #result = translator.translate(srcVal)
     # thisDotExt = langDotExt
     if not nextSub.lower().endswith(langDotExt.lower()):
@@ -1236,9 +1238,9 @@ def main():
     else:
         nextLang = nextSub[:-len(langDotExt)]
 
-    error("INFO: analyzing \"{}\"...".format(nextPath))
+    echo0("INFO: analyzing \"{}\"...".format(nextPath))
     nextPack = JGALPack(langsPath, nextSub, nextLang, options)
-    error("INFO: analyzing \"{}\"...".format(origLangPath))
+    echo0("INFO: analyzing \"{}\"...".format(origLangPath))
     origPack = JGALPack(langsPath, origLangSub, origLang, options)
     newCount = 0
     for key in origPack.keys:
@@ -1250,7 +1252,7 @@ def main():
             continue
         # nextPhrase is None, so generate it through translation.
         origPhrase = origPack.phrases[key]
-        # debug("*translate phrase* {}".format(origPhrase.value))
+        # echo1("*translate phrase* {}".format(origPhrase.value))
         nextValue = ""
         for chunk in ParseDirtyHTML(origPhrase.value,
                                     origPack.getPath(),
@@ -1295,7 +1297,7 @@ def main():
                     formatting = True
                 if not formatting:
                     tmp = translateCached(tmp, origLang, nextLang)
-                    #debug("  *translate chunk* " + tmp)
+                    #echo1("  *translate chunk* " + tmp)
                 tmp = escape_only(tmp, "\\n")
                 if escapeQ is not None:
                     tmp = tmp.replace(escapeQ, "\\" + escapeQ)
@@ -1305,7 +1307,7 @@ def main():
         #       chunks were (or the singular chunk if no html tags
         #       were present was) determined to be formatting and
         #       not actually translated.
-        debug("    *translated phrase* " + nextValue)
+        echo1("    *translated phrase* " + nextValue)
         gQ = origPhrase.gQ
         lQ = origPhrase.lQ
         kQ = origPhrase.kQ
@@ -1318,9 +1320,9 @@ def main():
 
     with open(trCachePath, 'w') as outs:
         json.dump(trCache, outs, sort_keys=True, indent=2)
-    error("INFO: The cache was saved to \"{}\"".format(trCachePath))
+    echo0("INFO: The cache was saved to \"{}\"".format(trCachePath))
     if newCount > 0:
-        error("INFO: {} printed in this session"
+        echo0("INFO: {} printed in this session"
               " based on the original language \"{}\""
               " are not yet in \"{}\","
               " so you will have to paste them into the file."
@@ -1328,7 +1330,7 @@ def main():
     else:
         origCount = len(origPack.keys)
         # ^ Keys is a list (origPack is an object not a dict).
-        error("INFO: All {} keys from the original language file \"{}\""
+        echo0("INFO: All {} keys from the original language file \"{}\""
               " are in \"{}\" (There is nothing to do)."
               "".format(origCount, origPack.getPath(),
                         nextPack.getPath()))
