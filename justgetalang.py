@@ -19,6 +19,11 @@ Contributing:
     output (See "usage").
 '''
 
+import os
+import sys
+import json
+import platform
+
 usageStr = '''
 -------------------------------- USAGE --------------------------------
 This script processes a specified language and outputs the missing
@@ -34,13 +39,7 @@ Example:
   ./justgetalang.py --from de --to en
 '''
 
-
-import os
-import sys
-import json
-import platform
-
-verbosity = False
+verbosity = 0
 enable_web_cache = True
 
 
@@ -50,8 +49,9 @@ def echo0(*args, **kwargs):
 
 def echo1(*args, **kwargs):
     if verbosity < 1:
-        return
+        return False
     print(*args, file=sys.stderr, **kwargs)
+    return True
 
 
 trCache = {}
@@ -60,6 +60,7 @@ if os.path.isfile(trCachePath):
     with open(trCachePath) as ins:
         trCache = json.load(ins)
 
+
 def bugHelp():
     echo0("--- INSTALL ---")
     echo0("You must install googletrans such as via:")
@@ -67,25 +68,28 @@ def bugHelp():
     # ^ has "AttributeError: 'NoneType' object has no attribute 'group'"
     #   on translator.translate
     #   (Note that translator is a Translator instance).
-    echo0("# (See <https://stackoverflow.com/questions/52455774/googletrans-stopped-working-with-error-nonetype-object-has-no-attribute-group>)")
+    echo0("# (See <https://stackoverflow.com/questions/52455774/"
+          "googletrans-stopped-working-with-error-nonetype-object-has"
+          "-no-attribute-group>)")
     echo0("# uninstall potential non-release versions:")
     echo0("sudo python3 -m pip uninstall googletrans")
     echo0("python3 -m pip uninstall -y googletrans")
-    #echo0("mkdir -p ~/Downloads/git/alainrouillon")
-    #echo0("cd ~/Downloads/git/alainrouillon")
-    #echo0("git clone https://github.com/alainrouillon/py-googletrans.git")
-    #echo0("cd ./py-googletrans")
-    #echo0("git checkout origin/feature/enhance-use-of-direct-api")
-    #echo0("python3 setup.py install --user")
+    # echo0("mkdir -p ~/Downloads/git/alainrouillon")
+    # echo0("cd ~/Downloads/git/alainrouillon")
+    # echo0("git clone https://github.com/alainrouillon/py-googletrans.git")
+    # echo0("cd ./py-googletrans")
+    # echo0("git checkout origin/feature/enhance-use-of-direct-api")
+    # echo0("python3 setup.py install --user")
 
-    #echo0("mkdir -p ~/Downloads/git/ssut")
-    #echo0("cd ~/Downloads/git/ssut")
-    #echo0("git clone https://github.com/ssut/py-googletrans.git")
-    #echo0("cd ./py-googletrans")
-    #echo0("python3 setup.py install --user")
+    # echo0("mkdir -p ~/Downloads/git/ssut")
+    # echo0("cd ~/Downloads/git/ssut")
+    # echo0("git clone https://github.com/ssut/py-googletrans.git")
+    # echo0("cd ./py-googletrans")
+    # echo0("python3 setup.py install --user")
     # ^ according to stackoverflow answer, but doesn't work 2021-07-29
 
-    # So see <https://github.com/ssut/py-googletrans/issues/234#issuecomment-857352132>:
+    # So see <https://github.com/ssut/py-googletrans/issues/234#
+    #   issuecomment-857352132>:
     echo0("# install a release version known to be compatible:")
     echo0("pip install googletrans==4.0.0rc1 --user")
     echo0("--- TEST ---:")
@@ -96,18 +100,23 @@ def bugHelp():
     echo0("print(result.text)")
     echo0("result = translator.translate('Hola', dest='pl')")
     echo0("print(\"Polish:\" + result.text)")
-    echo0("#If you still get the error \"AttributeError: 'NoneType' object has no attribute 'group'\" then check <https://stackoverflow.com/questions/52455774/googletrans-stopped-working-with-error-nonetype-object-has-no-attribute-group> for updated instructions.")
+    echo0("#If you still get the error \"AttributeError:"
+          " 'NoneType' object has no attribute 'group'\" then check"
+          " <https://stackoverflow.com/questions/52455774/googletrans"
+          "-stopped-working-with-error-nonetype-object-has-no-"
+          "attribute-group> for updated instructions.")
 
 
 try:
     import googletrans
 except ModuleNotFoundError:
     bugHelp()
-    exit(1)
+    sys.exit(1)
 
 from googletrans import Translator
 
 translator = Translator()
+
 
 def _translate(value, fromLang, toLang):
     '''
@@ -120,12 +129,14 @@ def _translate(value, fromLang, toLang):
     except AttributeError as ex:
         if "NoneType" in str(ex):
             bugHelp()
-            exit(1)
+            sys.exit(1)
         else:
             raise ex
     return value
 
+
 builtins_en_done = {}
+
 
 def build_builtins_en(fromLang, toLang):
     '''
@@ -193,6 +204,7 @@ def build_builtins_en(fromLang, toLang):
 
     builtins_en_done[fromLang] = True
 
+
 def translateCached(value, fromLang, toLang):
     rawV = value
     value = value.lstrip()
@@ -216,6 +228,7 @@ def translateCached(value, fromLang, toLang):
             trCache[fromLang][toLang][value] = got
     return preSpace + got + postSpace
 
+
 class DirtyHTML:
     FMT_HTML = 'html'
     FMT_TEXT = 'text'
@@ -233,6 +246,7 @@ class DirtyHTML:
 
 # TODO: Consider from pycodetool import to_syntax_error
 #  (to replace instances of {}:{}: formatted by `path, line` below).
+
 
 class ParseDirtyHTML:
     '''
@@ -376,7 +390,6 @@ class ParseDirtyHTML:
                 return False
         return True
 
-
     @staticmethod
     def isCodeSimpleAssignmentOp(s):
         '''
@@ -391,7 +404,6 @@ class ParseDirtyHTML:
                 if ' ' not in parts[1].strip():
                     return True
         return False
-
 
     @staticmethod
     def isNumber(s):
@@ -567,7 +579,6 @@ def set_verbosity(v):
         #                  "".format(value_to_py(v)))
 
 
-
 echo0("googletrans.LANGUAGES: " + json.dumps(googletrans.LANGUAGES))
 echo0("")
 
@@ -686,6 +697,7 @@ class JGALPhraseBuilder:
 
     def build(self):
         return JGALPhrase(self)
+
 
 class JGALPhrase:
     '''
@@ -932,14 +944,14 @@ class JGALPack:
                 firstCBI = find_non_whitespace(line, gFound[1]+1)
                 # ^ the first closing bracket's index
                 # if line[firstCBI] != "]":
-                if (firstCBI < 0) or (line[firstCBI]!="]"):
+                if (firstCBI < 0) or (line[firstCBI] != "]"):
                     echo0("{}:{}:{}: A closing bracket is expected"
                           "after the quoted translations key."
                           "".format(self.path, lineN, gFound[1]+1+CO))
                     extras.append(inLine)
                     continue
                 preLangI = firstCBI + 1
-                if (preLangI >= len(line)) or (line[preLangI]!="["):
+                if (preLangI >= len(line)) or (line[preLangI] != "["):
                     echo0("{}:{}:{}: An opening bracket is expected"
                           " after the close bracket after"
                           " the translations key."
@@ -972,7 +984,7 @@ class JGALPack:
                     continue
 
                 keyCBI = find_non_whitespace(line, lFound[1]+1)
-                if (keyCBI < 0) or (line[keyCBI]!="]"):
+                if (keyCBI < 0) or (line[keyCBI] != "]"):
                     echo0("{}:{}:{}: A closing bracket is expected"
                           "after the quoted language."
                           "".format(self.path, lineN, lFound[1]+1+CO))
@@ -1105,6 +1117,7 @@ class JGALPack:
         cls.existingLangsWarn = False
         return langs
 
+
 escaped = {}
 escaped["\\'"] = "'"
 escaped["\\\""] = "\""
@@ -1181,7 +1194,7 @@ def main():
     newExt = options.get('extension')
     if newExt is not None:
         langDotExt = "." + newExt
-    echo0("* using langDotExt: \"{}\"".format(langDotExt ))
+    echo0("* using langDotExt: \"{}\"".format(langDotExt))
     origLangSub = origLang + langDotExt
     tryOrigLangPath = os.path.join(".", origLangSub)
     if os.path.isfile(tryOrigLangPath):
@@ -1299,7 +1312,7 @@ def main():
                     formatting = True
                 if not formatting:
                     tmp = translateCached(tmp, origLang, nextLang)
-                    #echo1("  *translate chunk* " + tmp)
+                    # echo1("  *translate chunk* " + tmp)
                 tmp = escape_only(tmp, "\\n")
                 if escapeQ is not None:
                     tmp = tmp.replace(escapeQ, "\\" + escapeQ)
@@ -1336,7 +1349,8 @@ def main():
               " are in \"{}\" (There is nothing to do)."
               "".format(origCount, origPack.getPath(),
                         nextPack.getPath()))
+    return 0
+
 
 if __name__ == "__main__":
-    main()
-
+    sys.exit(main())
