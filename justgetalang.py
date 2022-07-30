@@ -231,6 +231,8 @@ class DirtyHTML:
         self.value = value
         self.fmt = fmt
 
+# TODO: Consider from pycodetool import to_syntax_error
+#  (to replace instances of {}:{}: formatted by `path, line` below).
 
 class ParseDirtyHTML:
     '''
